@@ -40,3 +40,39 @@ print(f"text: {text_with_context}")
 print(f"Predicted Class: {predicted_class}")
 print(f"Confidence: {confidence}")
 print(f"Signals: {signals}")
+
+#3 ลำดับศักด์ความสำคัญของข้อมูล เพื่อหาค่าน้ำหนักข้อมูล
+def get_physical_gats_previous(text):
+    weights = {0:1.0, 1:0.8, 2:0.6, 3:0.4, 4:0.2}
+    base_weight = weights.get(detect_category(text), 1.0)
+    if "ร้ายแรง" in text or "จำนวนมาก." in text:
+        base_weight += 0.5
+    return min(base_weight, 2.0)
+# Example usage
+text_for_weight = "การละเมิดสิทธิบัตรที่ร้ายแรงและมีจำนวนมากเป็นเรื่องที่ต้องระวัง"
+weight = get_physical_gats_previous(text_for_weight)
+print(f"Physical Gate Weight review: {weight}/10")
+
+# 4. การสร้าง JSON output
+import json
+from datetime import datetime
+def create_json_entry(doc_id, text):
+    label = detect_category(text)
+    confidence, signals = detect_category_with_confidence(text, label)
+    weight = get_physical_gats_previous(text)
+    entry = {
+        "id": f"LAW-{doc_id:04d}",
+        "text": text,
+        "label": label,
+        "metadata": {
+            "confidence": confidence,
+            "context_signals": signals,
+            "physical_gate_weight": weight,
+            "processed_at": datetime.now().isoformat(),
+            "requires_expert_review": confidence < 0.85
+        }
+    }
+    return entry
+# Example usage
+sample_entry = create_json_entry(1, "การละเมิดสิทธิบัตรที่ร้ายแรงและมีจำนวนมากเป็นเรื่องที่ต้องระวัง ตามมาตรา 10 แห่ง พ.ร.บ.ลิขสิทธิ์")
+print(json.dumps(sample_entry, ensure_ascii=False, indent=4))
