@@ -73,6 +73,6 @@ def create_json_entry(doc_id, text):
         }
     }
     return entry
-# Example usage
+# Example usagee
 sample_entry = create_json_entry(1, "การละเมิดสิทธิบัตรที่ร้ายแรงและมีจำนวนมากเป็นเรื่องที่ต้องระวัง ตามมาตรา 10 แห่ง พ.ร.บ.ลิขสิทธิ์")
 print(json.dumps(sample_entry, ensure_ascii=False, indent=4))
