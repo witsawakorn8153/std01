@@ -24,8 +24,11 @@ def legal_tokenizer(text): # ตัดคำ Baseline
 
 test_text = "จำเลยกระทำความผิดฐานละเมิดสิทธิบัตรและเครื่องหมายการค้า ตามมาตรา 10 แห่ง พ.ร.บ.ลิขสิทธิ์ และถูกฟ้องร้องในศาล"
 tokens = legal_tokenizer(test_text)
+# print(f"Input: {test_text}")
+print(f"\n{'-'*30}Legal Tokenizer Output{'-'*30}")
 print(f"Input: {test_text}")
-print(f"Output: {tokens}")
+print(f"Output: {tokens}\n")
+print(f"{'-'*80}\n")
 
 # การวัด ความกำกวม Ambiguity เทียบระหว่าง Dict-based+Regex กับ WangchanBERT (27 เมษายน 2024 - อัพเดตข้อมูลล่าสุด)
 def calculate_baseline_ambiguity(text):
@@ -48,9 +51,11 @@ def calculate_baseline_ambiguity(text):
 sample_text = "คดีการละเมิดสิทธิบัตรและเครื่องหมายการค้า"        
 baseline_tokens = legal_tokenizer(sample_text)
 baseline_rate = calculate_baseline_ambiguity(sample_text)
-print(f"---W1 Baseline Results---")
+print(f"\n{'-'*30}W1 Baseline Results---{'-'*30}")
 print(f"Tokens: {baseline_tokens}")
 print(f"Baseline Ambiguity Rate : {baseline_rate : .3f}")
+print(f"{'-'*80}\n")
+
 
 
 
@@ -81,10 +86,10 @@ def analyze_refined_ambiguity(text, legal_keywords):
 # รันแสดงผล WangchanBERT Ambiguity เปรียบเทียบ
 refined_tokrns = berta_tokenizer(sample_text)
 refined_rate = analyze_refined_ambiguity(sample_text, LEGAL_KEYWORD)
-print(f"---W1 : Refined With WangchanBERT---")
+print(f"\n{'-'*30}W1 : Refined With WangchanBERT---{'-'*30}")
 print(f"Tokens: {refined_tokrns}")
 print(f"New Ambiguity Fragmentation Rate : {refined_rate : .3f}")
-print(f"---End of W1 Baseline---")
+print(f"{'-'*80}\n")
 
             
             
@@ -114,9 +119,11 @@ def extract_legal_entities(text):
 
 sample = "มีการละเมิดสิทธิบัตรในคดีนี้เพราะจำเลยได้ผลิตสินค้าที่มีลักษณะคล้ายกับสิทธิบัตรที่ถูกจดทะเบียนไว้"
 found = extract_legal_entities(sample)
-print(f"---Entity Extraction---")
+print(f"\n{'-'*30}Entity Extraction{'-'*30}")
 for e in found:
     print(f"Type: {e['type']}, Value: {e['value']}, Confidence: {e['confidence']}")
+    print(f"{'-'*80}\n")
+    
     
 # 3. Feature Engineering (IF-IDF)
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -129,9 +136,10 @@ corpus = ["จำเลยกระทำความผิดฐานละเ
 #สร้างตัง Vectorizer โดยใช้ Tokenizer ที่กำหนดเอง
 vectorizer = TfidfVectorizer(tokenizer=legal_tokenizer, token_pattern=None) #ใช้ฟังก์ชัน legal_tokenizer ที่เราสร้างขึ้นมาเป็นตัวตัดคำ   
 tfudf_matrix = vectorizer.fit_transform(corpus)
-print(f"---TF-IDF Vector (Shape: {tfudf_matrix.shape})---") 
+print(f"\n{'-'*30}TF-IDF Vector (Shape: {tfudf_matrix.shape})---{'-'*30}")
 print(f"Vocabulary: {vectorizer.get_feature_names_out()}")
 print(f"Voctor Sample (Doc 0):\n {tfudf_matrix[0].toarray()}")
+print(f"{'-'*80}\n")
 
 
 # 4. Physical Gate Weight 
@@ -144,9 +152,10 @@ def calculate_physical_gate_weight(entities):
 
 #ทดสอบการคำนวณน้ำหนักจาก เอนทิตีที่ถูกสกัดออกมา
 weight = calculate_physical_gate_weight(found)
-print(f"--Physical Gate Bridge Weight--")
+print(f"\n{'-'*30}Physical Gate Bridge Weight{'-'*30}")
 print(f"--Legal Context Weight: {weight[0]:.2f}/ 10.0--")
 print(f"--Status: {'High Alert - Trigger Sensor' if weight[0] > 7.0 else 'Normal Monitoring'}--")
+print(f"{'-'*80}\n")
 
 
    
