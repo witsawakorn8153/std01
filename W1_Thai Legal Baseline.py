@@ -87,7 +87,7 @@ refined_rate = analyze_refined_ambiguity(sample_text, LEGAL_KEYWORD)
 print(f"\n{'-'*30}W1 : Refined With WangchanBERT---{'-'*30}")
 print(f"Tokens: {refined_tokrns}")
 print(f"New Ambiguity Fragmentation Rate : {refined_rate : .3f}")
-print(f"{'-'*80}\n")
+print(f"{'-'*80}\n") 
               
                   
 

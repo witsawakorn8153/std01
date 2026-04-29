@@ -1,6 +1,6 @@
 # Sinusoidal Positional Embeddings การเข้ารหัสตำแหน่งแบบไซนูซอยดัล เพื่อให้โมเดลเข้าใจลำดับของคำในประโยค
 import numpy as np
-class SinusoidalPositionalEmbedding:
+class SinusoidalPositionalEmbedding: # การจัดลำดับของคำ
     def __init__(self, max_seq_len = 10, d_model = 16):
         pe = np.zeros((max_seq_len, d_model))
         pos = np.arange(max_seq_len).reshape(-1, 1)
@@ -52,4 +52,26 @@ print(f"\n{'-'*35}Attention Weights 3x3 Matrix{'-'*35}")
 print(weights[0].round(2))
 print(f"{'='*100}\n")
 
-#  27 เมษายน 2024 - อัพเดตข้อมูลล่าสุดเกี่ยวกับการทำงานของ Attention และกาารใช้ Masking ในการประมวลผลข้อความทางกฎหมา เพื่อให้โมเดลสามารถจัดการกับความยาวของเอกสารที่แตกต่างกันได้อย่างมีประสิทธิภาพมากขึ้น
+# 27 เมษายน 2024 - อัพเดตข้อมูลล่าสุดเกี่ยวกับการทำงานของ Attention และกาารใช้ Masking ในการประมวลผลข้อความทางกฎหมา เพื่อให้โมเดลสามารถจัดการกับความยาวของเอกสารที่แตกต่างกันได้อย่างมีประสิทธิภาพมากขึ้น
+
+# 29 เมษายน 2024 - Update
+# 3.1 Multi-Head Attention (การมองหลายมุมมอง) ช่วยให้เข้าใจได้พร้อมความสัมพันธ์หลายรูปแบบพร้อมกัน
+class MultiHeadAttentionsSimple:
+    def __init__(self, d_model=16, n_heads=4):
+        # d_k = q.shape[-1]
+        self.n_heads = n_heads
+        self.d_k = int(d_model // n_heads)
+    def split_heads(self, x):
+        batch_size, seq_len, d_model = x.shape
+        return x.reshape(batch_size, seq_len, self.n_heads, self.d_k).transpose(0,2,1,3)
+
+# จำลอง Input ขนาด 16 มิติ (d) แบ่งเป็น 4 Head (Head ละ 4 dim)
+input_data = np.random.randn(1,5,16)
+mha = MultiHeadAttentionsSimple()
+heads = mha.split_heads(input_data)
+print(f"\n{'🟢'*50}\n")
+print(f"Origin Shape : {input_data.shape}")
+print(f"Heads Shape : {heads.shape} (Batch, Heads, Seq_len, Depth)")
+print(f"{'='*100}\n")
+        
+# 3.2 
