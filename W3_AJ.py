@@ -1,3 +1,5 @@
+import numpy as np
+
 # ============================================================
 # 1. Sinusoidal Positional Encoding
 # ============================================================
@@ -10,7 +12,7 @@ class SinusodalPositionEncoding:
         pe[:, 1::2] = np.cos(pos / div)
         self.pe = pe
 
-    def encode(self, X):                          # เพิ่ม method นี้
+    def encode(self, X):
         return X + self.pe[:X.shape[0], :]
 
     def show(self, seq_len=5):
@@ -29,16 +31,15 @@ class SinusodalPositionEncoding:
 
 
 # ============================================================
-# 2. Scaled Dot-Product Attention + Causal/Padding Mask
+# 2. Scaled Dot-Product Attention
 # ============================================================
 def scale_dot_product_attention(Q, K, V, mask=None, causal_mask=None):
     d_k = Q.shape[-1]
     scores = np.matmul(Q, K.transpose(0, 2, 1)) / np.sqrt(d_k)
 
-    if causal_mask is not None:                   # บัง token อนาคต (GPT)
+    if causal_mask is not None:
         scores = np.where(causal_mask, -1e9, scores)
-
-    if mask is not None:                          # padding mask (BERT)
+    if mask is not None:
         scores = np.where(mask == 0, -1e9, scores)
 
     exp_s = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
@@ -47,7 +48,7 @@ def scale_dot_product_attention(Q, K, V, mask=None, causal_mask=None):
 
 
 # ============================================================
-# 3. Multi-Head Attention (รับ causal_mask และ padding_mask)
+# 3. Multi-Head Attention — แก้ไข forward() ให้สมบูรณ์
 # ============================================================
 class MultiHeadAttentionSimple:
     def __init__(self, d_model=16, n_heads=4, seed=42):
@@ -67,16 +68,25 @@ class MultiHeadAttentionSimple:
         batch, heads, seq_len, d_k = x.shape
         return x.transpose(0, 2, 1, 3).reshape(batch, seq_len, heads * d_k)
 
+    def layer_norm(self, x):
+        return (x - x.mean(axis=-1, keepdims=True)) / (x.std(axis=-1, keepdims=True) + 1e-6)
+
     def forward(self, x, padding_mask=None, causal_mask=None, return_weights=False):
-        # รับ x shape: (seq, d_model) หรือ (batch, seq, d_model)
+        # รับ shape (seq, d_model) หรือ (batch, seq, d_model)
         if x.ndim == 2:
-            x = x[np.newaxis, :]               # เพิ่ม batch dim
+            x = x[np.newaxis, :]          # เพิ่ม batch dim → (1, seq, d_model)
+
+        # [Pre-Norm] normalize ก่อนเข้า attention
+        x_norm = self.layer_norm(x)
 
         batch, seq, _ = x.shape
-        Q = self.split_heads(np.matmul(x, self.W_q))
-        K = self.split_heads(np.matmul(x, self.W_k))
-        V = self.split_heads(np.matmul(x, self.W_v))
 
+        # Linear projection → แยก heads
+        Q = self.split_heads(np.matmul(x_norm, self.W_q))  # (batch,heads,seq,d_k)
+        K = self.split_heads(np.matmul(x_norm, self.W_k))
+        V = self.split_heads(np.matmul(x_norm, self.W_v))
+
+        # reshape เพื่อคำนวณ attention พร้อมกันทุก head
         Q_r = Q.reshape(batch * self.n_heads, seq, self.d_k)
         K_r = K.reshape(batch * self.n_heads, seq, self.d_k)
         V_r = V.reshape(batch * self.n_heads, seq, self.d_k)
@@ -86,15 +96,25 @@ class MultiHeadAttentionSimple:
         if causal_mask is not None:
             cm = np.tile(causal_mask[np.newaxis], (batch * self.n_heads, 1, 1))
 
-        attn_out, attn_weights = scale_dot_product_attention(Q_r, K_r, V_r,
-                                                              mask=padding_mask,
-                                                              causal_mask=cm)
+        attn_out, attn_weights = scale_dot_product_attention(
+            Q_r, K_r, V_r, mask=padding_mask, causal_mask=cm
+        )
+
+        # reshape กลับ → combine heads → output projection
         attn_weights = attn_weights.reshape(batch, self.n_heads, seq, seq)
-        attn_out = self.combine_heads(attn_out.reshape(batch, self.n_heads, seq, self.d_k))
+        attn_out = self.combine_heads(
+            attn_out.reshape(batch, self.n_heads, seq, self.d_k)
+        )
         output = np.matmul(attn_out, self.W_o)
 
-        # คืน shape (seq, d_model) ถ้า input เป็น 2D
-        return output.squeeze(0), attn_weights.squeeze(0)
+        # residual connection (บวก x เดิม ไม่ใช่ x_norm)
+        output = output + x
+
+        # คืน shape (seq, d_model) ถ้า input เดิมเป็น 2D
+        output = output.squeeze(0)
+        attn_weights = attn_weights.squeeze(0)
+
+        return (output, attn_weights) if return_weights else (output, attn_weights)
 
 
 # ============================================================
@@ -139,8 +159,8 @@ class TransformerEncoderBlock:
 
     def forward(self, X, padding_mask=None, return_weights=False):
         attn_out, hw = self.mha.forward(X, padding_mask=padding_mask,
-                                         causal_mask=None,
-                                         return_weights=return_weights)
+                                        causal_mask=None,
+                                        return_weights=return_weights)
         x1 = X + attn_out
         x2 = x1 + self.ffn.forward(layer_norm(x1))
         return x2, hw
@@ -161,7 +181,7 @@ class TransformerDecoderBlock:
     def forward(self, X, padding_mask=None, return_weights=False):
         T = X.shape[0]
         attn_out, hw = self.mha.forward(X, causal_mask=self._causal_mask(T),
-                                         return_weights=return_weights)
+                                        return_weights=return_weights)
         x1 = X + attn_out
         x2 = x1 + self.ffn.forward(layer_norm(x1))
         return x2, hw
@@ -191,7 +211,7 @@ class MiniBERT:
         all_weights = []
         for layer in self.layers:
             X, hw = layer.forward(X, padding_mask=padding_mask,
-                                   return_weights=return_weights)
+                                  return_weights=return_weights)
             if return_weights:
                 all_weights.append(hw)
         ctx = X.mean(axis=0)
@@ -236,19 +256,16 @@ def run_demo():
     input_dim = 8
 
     rng = np.random.RandomState(0)
-    X_sample = rng.randn(seq_len, input_dim) * 0.1   # (4, 8)
+    X_sample = rng.randn(seq_len, input_dim) * 0.1
 
-    # Project + PE ก่อนใช้ใน STEP 2-3
     W_proj = rng.randn(d_model, input_dim) * 0.1
     pe = SinusodalPositionEncoding(512, d_model)
-    X_emb = pe.encode(X_sample @ W_proj.T)            # (4, 32)
+    X_emb = pe.encode(X_sample @ W_proj.T)
 
-    # ── STEP 1 ──────────────────────────────────────────────
     print_section("STEP 1: Encoder Block — สร้างและแสดง config")
     enc_block = TransformerEncoderBlock(d_model=d_model, n_heads=n_heads, seed=42)
     print(f"  d_model={d_model}, n_heads={n_heads}, d_k={enc_block.mha.d_k}")
 
-    # ── STEP 2 ──────────────────────────────────────────────
     print_section("STEP 2: Encoder Block (BERT) — Full Attention")
     enc_out, enc_ws = enc_block.forward(X_emb, return_weights=True)
     print(f"  Input  shape : {X_emb.shape}")
@@ -256,7 +273,6 @@ def run_demo():
     print(f"\n  Head 1 — Full Attention:")
     _print_heatmap(enc_ws[0], seq_len)
 
-    # ── STEP 3 ──────────────────────────────────────────────
     print_section("STEP 3: Decoder Block (GPT) — Causal Mask")
     dec_block = TransformerDecoderBlock(d_model=d_model, n_heads=n_heads, seed=42)
     dec_out, dec_ws = dec_block.forward(X_emb, return_weights=True)
@@ -269,7 +285,6 @@ def run_demo():
         row = "".join("  ✓" if not mask[i, j] else "  ✗" for j in range(seq_len))
         print(f"   t{i}  {row}")
 
-    # ── STEP 4 ──────────────────────────────────────────────
     print_section("STEP 4: MiniBERT — 2-Layer Encoder")
     bert = MiniBERT(input_size=input_dim, d_model=d_model,
                     n_heads=n_heads, n_layers=2, n_classes=3, seed=42)
@@ -281,7 +296,6 @@ def run_demo():
     print(f"\n  Layer 2 — Head 1:")
     _print_heatmap(bert_ws[1][0], seq_len)
 
-    # ── STEP 5 ──────────────────────────────────────────────
     print_section("STEP 5: MiniGPT — 2-Layer Decoder")
     gpt = MiniGPT(input_size=input_dim, d_model=d_model,
                   n_heads=n_heads, n_layers=2, seed=42)
@@ -292,7 +306,6 @@ def run_demo():
     print(f"\n  Layer 2 — Head 1 (Causal):")
     _print_heatmap(gpt_ws[1][0], seq_len)
 
-    # ── STEP 6 ──────────────────────────────────────────────
     print_section("STEP 6: Encoder vs Decoder — สรุป")
     print("""
   ┌─────────────────────┬──────────────────────┬──────────────────────┐
@@ -307,5 +320,46 @@ def run_demo():
     """)
 
 
+# ============================================================
+# XAI Analysis
+# ============================================================
+def explainable_attention(tokens, weight):
+    avg_weight = weight[0].mean(axis=0)
+    print(f"--- XAI : Legal Importance Analysis ---")
+    for i, token in enumerate(tokens):
+        importance = avg_weight[i]
+        bar = "|" * int(importance * 20)
+        print(f"{token:<15} | {bar} ({importance:.2f})")
+
+
+# ============================================================
+# Pre-Norm ทดสอบตรงๆ
+# ============================================================
+def test_prenorm():
+    print("\n#------- Pre-Norm ----------")
+    mha = MultiHeadAttentionSimple(d_model=16, n_heads=4)
+    sample_input = np.random.randn(4, 16)
+    output, _ = mha.forward(sample_input)
+    print(f"Input Shape : {sample_input.shape} -> Output Shape {output.shape} (Success)")
+
+
 if __name__ == "__main__":
+    # XAI demo
+    tokens = ["จำเลย", "ละเมิด", "สิทธิบัตร", "การประดิษฐ์"]
+
+    mock_weight = np.array([[[0.1, 0.4, 0.4, 0.1]]])
+    explainable_attention(tokens, mock_weight)
+
+    mock_3heads = np.array([[[0.1, 0.5, 0.3, 0.1],
+                              [0.2, 0.2, 0.5, 0.1],
+                              [0.4, 0.2, 0.2, 0.2]]])
+    print(f"1 Head  Shape (Batch,Head,Seq): {mock_weight.shape}")
+    print(f"3 Heads Shape (Batch,Head,Seq): {mock_3heads.shape}")
+    print(f"\n3 Heads Average")
+    explainable_attention(tokens, mock_3heads)
+
+    # Pre-Norm test
+    test_prenorm()
+
+    # Full demo
     run_demo()
